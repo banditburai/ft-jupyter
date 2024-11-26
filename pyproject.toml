@@ -1,0 +1,22 @@
+[project]
+name = "ft-jupyter"
+version = "0.1.0"
+description = "FastHTML tools for Jupyter notebooks"
+readme = "README.md"
+authors = [
+    { name = "firefly", email = "promptsiren@gmail.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "ipykernel>=6.29.5",
+    "python-fasthtml>=0.10.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build]
+include = [
+    "src/ftjupyter/py.typed",
+]
