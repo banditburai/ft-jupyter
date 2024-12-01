@@ -1,6 +1,7 @@
+from __future__ import annotations
 from dataclasses import dataclass, field
 from functools import wraps
-from typing import Callable, Any, List, Dict
+from typing import Callable, Any, List, Dict, Optional
 from fasthtml.common import *
 from fasthtml.jupyter import *
 from IPython.display import display, HTML 
@@ -8,7 +9,7 @@ from IPython.display import display, HTML
 def requires_shell(func: Callable) -> Callable[..., Optional[Any]]:
     """Decorator to ensure shell is available"""
     @wraps(func)
-    def wrapper(self: NotebookContext, *args, **kwargs) -> Optional[Any]:
+    def wrapper(self: 'NotebookContext', *args, **kwargs) -> Optional[Any]:
         return None if not self._shell else func(self, *args, **kwargs)
     return wrapper
 
