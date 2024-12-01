@@ -16,11 +16,5 @@ dependencies = [
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[tool.hatch.packages.find]
-where = ["src"]
-include = ["ft_jupyter*"]
-
-[tool.hatch.build]
-include = [
-    "src/ft_jupyter/py.typed",
-]
+[tool.hatch.packages]
+find = { where = ["src"] } 
