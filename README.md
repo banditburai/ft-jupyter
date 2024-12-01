@@ -14,3 +14,22 @@ You can import directly from GitHub:
 ```bash
 pip install git+https://github.com/banditburai/ft-jupyter.git
 ```
+
+
+Note to self (Quicklaunch with uv):
+
+```bash
+ uv init --app . --python python3.11
+```
+```bash
+ uv add --dev ipykernel uv
+```
+
+```bash
+ uv add python-fasthtml
+```
+
+in notebook:
+```bash
+ !uv add git+https://github.com/banditburai/ft-jupyter.git
+```
