@@ -203,7 +203,7 @@ class PageManager:
     
     def __post_init__(self) -> None:
         """Initialize FastHTML app and notebook context"""
-        # Setup FastHTML
+        # Setup FastHTML        
         self._app = FastHTML(exts=self.exts)
         self._server = JupyUvi(self._app)
         setup_ws(self._app)
