@@ -320,20 +320,20 @@ class PageManager:
         # Clean up any existing manager first
         self.cleanup_existing()
         
-        # Wait for port to be available
-        if not self.wait_for_port(self.port, self.timeout):
-            raise RuntimeError(f"Port {self.port} is still in use after {self.timeout} seconds")
-            
-        # Setup FastHTML        
-        self._app = FastHTML(exts=self.exts)
-        self._server = JupyUvi(self._app)
-        setup_ws(self._app)
-        
-        # Setup notebook context
+        # Setup notebook context (this doesn't need the port)
         self._context = NotebookContext()
         self._callback_registered = self._context.register_callback(
             self._context.auto_update_cell
         )
+        
+        # Now wait for port to be available
+        if not self.wait_for_port(self.port, self.timeout):
+            raise RuntimeError(f"Port {self.port} is still in use after {self.timeout} seconds")
+            
+        # Finally setup FastHTML        
+        self._app = FastHTML(exts=self.exts)
+        self._server = JupyUvi(self._app)
+        setup_ws(self._app)
 
     def add_to_all(self, *elements: Any) -> None:
         """Add elements to all pages (existing and future)"""
