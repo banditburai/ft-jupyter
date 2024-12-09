@@ -260,3 +260,11 @@ class PageManager:
         """Disable auto-updates for a route"""
         if page := self.pages.get(route):
             page.active = False
+
+    def post(self, path: str):
+        """Decorator for POST routes"""
+        return self._app.post(path)
+    
+    def get(self, path: str):
+        """Decorator for GET routes"""
+        return self._app.get(path)
