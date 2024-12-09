@@ -352,3 +352,8 @@ class PageManager:
         """Decorator for GET routes"""
         return self._app.get(path)
         
+    @contextmanager
+    def show_ft(self):
+        """Convenience method to access show_ft from the context"""
+        with self._context.show_ft() as code:
+            yield code
