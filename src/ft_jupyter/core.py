@@ -233,9 +233,13 @@ class PageManager:
         self.pages[route] = page
         self._context.register_page(page)
         
+        # Add common elements to the new page
+        if self._common_elements:
+            page.add(*self._common_elements)
+        
         # Show page link
         self._display_page_link(route)
-        return page
+        return page    
     
     def _display_page_link(self, route: str) -> None:
         """Display clickable link to page"""
