@@ -21,12 +21,60 @@ class NotebookContext:
     """Manages IPython/Jupyter notebook context and variable tracking"""
     pages: List['Page'] = field(default_factory=list)
     _shell: Any = field(init=False, default=None)
+    _current_manager: Optional['PageManager'] = field(init=False, default=None)
+    
+    _instance: Optional['NotebookContext'] = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
     
     def __post_init__(self) -> None:
-        """Initialize IPython shell connection"""
-        from IPython import get_ipython
-        self._shell = get_ipython()    
+        """Initialize IPython shell connection if not already initialized"""
+        if not hasattr(self, '_shell'):
+            from IPython import get_ipython
+            self._shell = get_ipython()
     
+    @staticmethod
+    def is_port_in_use(port: int = 8000) -> bool:
+        """Check if a port is currently in use"""
+        host = '0.0.0.0'  # Binds to all interfaces including localhost
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(1)
+                s.bind((host, port))
+                s.close()
+                return False
+        except (OSError, socket.error):
+            return True
+    
+    @staticmethod
+    def wait_for_port(port: int = 8000, timeout: int = 5) -> bool:
+        """Wait for port to become available"""
+        for _ in range(timeout):
+            if not NotebookContext.is_port_in_use(port):
+                return True
+            time.sleep(1)
+        return False
+    
+    @requires_shell
+    def cleanup_manager(self) -> None:
+        """Clean up existing PageManager if any"""
+        if self._current_manager is not None:
+            self._current_manager.stop()
+            self._current_manager = None
+            time.sleep(1)  # Wait for cleanup
+    
+    def register_manager(self, manager: 'PageManager') -> None:
+        """Register a new PageManager instance"""
+        self.cleanup_manager()
+        self._current_manager = manager
+        
+        # Wait for port to be available
+        if not self.wait_for_port(manager.port, manager.timeout):
+            raise RuntimeError(f"Port {manager.port} is still in use after {manager.timeout} seconds")
+        
     @contextmanager
     @requires_shell
     def show_ft(self):
@@ -274,63 +322,23 @@ class PageManager:
     _app: Any = field(init=False)
     _server: Any = field(init=False)
     _callback_registered: bool = field(init=False, default=False)
-    
-    @classmethod
-    def cleanup_existing(cls):
-        """Clean up any existing manager instance"""
-        try:
-            manager.stop()  # type: ignore
-            # Wait a moment for cleanup to complete
-            time.sleep(1)  
-        except NameError:
-            pass  # manager not defined yet, that's ok
-
-    @staticmethod
-    def is_port_in_use(port: int = 8000) -> bool:
-        """Check if a port is currently in use"""
-        host = '0.0.0.0'  # Binds to all interfaces including localhost
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.settimeout(1)
-                s.bind((host, port))
-                s.close()
-                return False
-        except (OSError, socket.error):
-            return True
-    
-    @staticmethod
-    def wait_for_port(port: int = 8000, timeout: int = 5) -> bool:
-        """Wait for port to become available
         
-        Args:
-            port: Port number to check
-            timeout: Maximum seconds to wait
-            
-        Returns:
-            bool: True if port became available, False if timed out
-        """
-        for _ in range(timeout):
-            if not PageManager.is_port_in_use(port):
-                return True
-            time.sleep(1)
-        return False
-    
     def __post_init__(self) -> None:
         """Initialize FastHTML app and notebook context"""
-        # Clean up any existing manager first
-        self.cleanup_existing()
-        
-        # Setup notebook context (this doesn't need the port)
+        # Get the singleton NotebookContext
         self._context = NotebookContext()
-        self._callback_registered = self._context.register_callback(
-            self._context.auto_update_cell
-        )
         
-        # Now wait for port to be available
-        if not self.wait_for_port(self.port, self.timeout):
-            raise RuntimeError(f"Port {self.port} is still in use after {self.timeout} seconds")
+        # Register callback if not already registered
+        if not self._callback_registered:
+            self._callback_registered = True
+            self._context.register_callback(
+                self._context.auto_update_cell
+            )
+        
+        # Register self with context (this will clean up any existing manager and check port)
+        self._context.register_manager(self)
             
-        # Finally setup FastHTML        
+        # Setup FastHTML        
         self._app = FastHTML(exts=self.exts)
         self._server = JupyUvi(self._app)
         setup_ws(self._app)
