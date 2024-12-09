@@ -6,8 +6,6 @@ from contextlib import contextmanager
 from fasthtml.common import *
 from fasthtml.jupyter import *
 from IPython.display import display, HTML 
-import time
-import socket
 
 def requires_shell(func: Callable) -> Callable[..., Optional[Any]]:
     """Decorator to ensure shell is available"""
@@ -21,60 +19,12 @@ class NotebookContext:
     """Manages IPython/Jupyter notebook context and variable tracking"""
     pages: List['Page'] = field(default_factory=list)
     _shell: Any = field(init=False, default=None)
-    _current_manager: Optional['PageManager'] = field(init=False, default=None)
-    
-    _instance: Optional['NotebookContext'] = None
-
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
     
     def __post_init__(self) -> None:
-        """Initialize IPython shell connection if not already initialized"""
-        if not hasattr(self, '_shell'):
-            from IPython import get_ipython
-            self._shell = get_ipython()
+        """Initialize IPython shell connection"""
+        from IPython import get_ipython
+        self._shell = get_ipython()    
     
-    @staticmethod
-    def is_port_in_use(port: int = 8000) -> bool:
-        """Check if a port is currently in use"""
-        host = '0.0.0.0'  # Binds to all interfaces including localhost
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.settimeout(1)
-                s.bind((host, port))
-                s.close()
-                return False
-        except (OSError, socket.error):
-            return True
-    
-    @staticmethod
-    def wait_for_port(port: int = 8000, timeout: int = 5) -> bool:
-        """Wait for port to become available"""
-        for _ in range(timeout):
-            if not NotebookContext.is_port_in_use(port):
-                return True
-            time.sleep(1)
-        return False
-    
-    @requires_shell
-    def cleanup_manager(self) -> None:
-        """Clean up existing PageManager if any"""
-        if self._current_manager is not None:
-            self._current_manager.stop()
-            self._current_manager = None
-            time.sleep(1)  # Wait for cleanup
-    
-    def register_manager(self, manager: 'PageManager') -> None:
-        """Register a new PageManager instance"""
-        self.cleanup_manager()
-        self._current_manager = manager
-        
-        # Wait for port to be available
-        if not self.wait_for_port(manager.port, manager.timeout):
-            raise RuntimeError(f"Port {manager.port} is still in use after {manager.timeout} seconds")
-        
     @contextmanager
     @requires_shell
     def show_ft(self):
@@ -314,34 +264,25 @@ class Page:
 class PageManager:
     """Manages FastHTML pages and websocket connections"""
     exts: str = "ws"
-    port: int = 8000
-    timeout: int = 5
     pages: Dict[str, Page] = field(default_factory=dict)
     _common_elements: List = field(default_factory=list)
     _context: NotebookContext = field(init=False)
     _app: Any = field(init=False)
     _server: Any = field(init=False)
     _callback_registered: bool = field(init=False, default=False)
-        
+    
     def __post_init__(self) -> None:
         """Initialize FastHTML app and notebook context"""
-        # Get the singleton NotebookContext
-        self._context = NotebookContext()
-        
-        # Register callback if not already registered
-        if not self._callback_registered:
-            self._callback_registered = True
-            self._context.register_callback(
-                self._context.auto_update_cell
-            )
-        
-        # Register self with context (this will clean up any existing manager and check port)
-        self._context.register_manager(self)
-            
         # Setup FastHTML        
         self._app = FastHTML(exts=self.exts)
         self._server = JupyUvi(self._app)
         setup_ws(self._app)
+        
+        # Setup notebook context
+        self._context = NotebookContext()
+        self._callback_registered = self._context.register_callback(
+            self._context.auto_update_cell
+        )
 
     def add_to_all(self, *elements: Any) -> None:
         """Add elements to all pages (existing and future)"""
