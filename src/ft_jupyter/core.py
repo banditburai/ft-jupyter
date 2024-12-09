@@ -280,6 +280,8 @@ class PageManager:
         """Clean up any existing manager instance"""
         try:
             manager.stop()  # type: ignore
+            # Wait a moment for cleanup to complete
+            time.sleep(1)  
         except NameError:
             pass  # manager not defined yet, that's ok
 
@@ -287,12 +289,14 @@ class PageManager:
     def is_port_in_use(port: int = 8000) -> bool:
         """Check if a port is currently in use"""
         host = '0.0.0.0'  # Binds to all interfaces including localhost
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            try:
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(1)
                 s.bind((host, port))
+                s.close()
                 return False
-            except OSError:
-                return True
+        except (OSError, socket.error):
+            return True
     
     @staticmethod
     def wait_for_port(port: int = 8000, timeout: int = 5) -> bool:
