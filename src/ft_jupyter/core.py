@@ -2,6 +2,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from functools import wraps
 from typing import Callable, Any, List, Dict, Optional
+from contextlib import contextmanager
 from fasthtml.common import *
 from fasthtml.jupyter import *
 from IPython.display import display, HTML 
@@ -24,6 +25,74 @@ class NotebookContext:
         from IPython import get_ipython
         self._shell = get_ipython()    
     
+    @contextmanager
+    @requires_shell
+    def show_ft(self):
+        """Context manager for converting notebook code to FastHTML format."""
+        fasthtml_code = []
+        yield fasthtml_code
+                
+        ip = self._shell
+                
+        cell = ip.history_manager.input_hist_parsed[-1]
+        
+        # Remove the context manager lines
+        code_lines = [
+            line for line in cell.splitlines() 
+            if not line.strip().startswith(('with show_ft():', '@contextmanager', 'yield'))
+        ]
+        
+        # Check if this is a route handler
+        if any("@manager.post" in line or "@manager.get" in line for line in code_lines):
+            for i, line in enumerate(code_lines):
+                if "@manager." in line:
+                    method = "get" if "get" in line else "post"
+                    route = line.split('"')[1]
+                    if not route.startswith('/'):
+                        route = '/' + route
+                    
+                    func_def = code_lines[i + 1]
+                    func_body = code_lines[i + 2:]
+                    
+                    base_indent = len(func_body[0]) - len(func_body[0].lstrip())
+                    
+                    fasthtml_code.append(f"@rt('{route}')\ndef {method}():")
+                    for line in func_body:
+                        if line.strip():
+                            adjusted_line = "    " + line[base_indent:]
+                            fasthtml_code.append(adjusted_line)
+                        else:
+                            fasthtml_code.append(line)
+                    break
+        
+        elif any("create_page" in line for line in code_lines):
+            route = None
+            for line in code_lines:
+                if "create_page" in line:
+                    route = line.split('"')[1]
+                    break
+            
+            if route is not None:
+                fasthtml_code.append(f"@rt('/{route}')\ndef get():")
+                inside_add = False
+                content_lines = []
+                for line in code_lines:
+                    if ".add(" in line:
+                        inside_add = True
+                        content_lines.append(line[line.find(".add(") + 5:].strip())
+                    elif inside_add:
+                        if line.strip().endswith(")"):
+                            inside_add = False
+                            content_lines.append(line.strip()[:-1])
+                        else:
+                            content_lines.append(line.strip())
+                
+                content = "\n        ".join(content_lines)
+                fasthtml_code.append(f"    return Div(\n        {content}\n    )")
+        
+        if fasthtml_code:
+            fasthtml_code[:] = ["\n".join(fasthtml_code)]
+
     def register_page(self, page: 'Page') -> None:
         """Register a page for variable tracking"""
         self.pages.append(page)
