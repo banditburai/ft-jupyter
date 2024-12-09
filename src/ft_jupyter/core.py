@@ -6,6 +6,8 @@ from contextlib import contextmanager
 from fasthtml.common import *
 from fasthtml.jupyter import *
 from IPython.display import display, HTML 
+import time
+import socket
 
 def requires_shell(func: Callable) -> Callable[..., Optional[Any]]:
     """Decorator to ensure shell is available"""
@@ -264,6 +266,8 @@ class Page:
 class PageManager:
     """Manages FastHTML pages and websocket connections"""
     exts: str = "ws"
+    port: int = 8000
+    timeout: int = 5
     pages: Dict[str, Page] = field(default_factory=dict)
     _common_elements: List = field(default_factory=list)
     _context: NotebookContext = field(init=False)
@@ -271,8 +275,51 @@ class PageManager:
     _server: Any = field(init=False)
     _callback_registered: bool = field(init=False, default=False)
     
+    @classmethod
+    def cleanup_existing(cls):
+        """Clean up any existing manager instance"""
+        try:
+            manager.stop()  # type: ignore
+        except NameError:
+            pass  # manager not defined yet, that's ok
+
+    @staticmethod
+    def is_port_in_use(port: int = 8000) -> bool:
+        """Check if a port is currently in use"""
+        host = '0.0.0.0'  # Binds to all interfaces including localhost
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind((host, port))
+                return False
+            except OSError:
+                return True
+    
+    @staticmethod
+    def wait_for_port(port: int = 8000, timeout: int = 5) -> bool:
+        """Wait for port to become available
+        
+        Args:
+            port: Port number to check
+            timeout: Maximum seconds to wait
+            
+        Returns:
+            bool: True if port became available, False if timed out
+        """
+        for _ in range(timeout):
+            if not PageManager.is_port_in_use(port):
+                return True
+            time.sleep(1)
+        return False
+    
     def __post_init__(self) -> None:
         """Initialize FastHTML app and notebook context"""
+        # Clean up any existing manager first
+        self.cleanup_existing()
+        
+        # Wait for port to be available
+        if not self.wait_for_port(self.port, self.timeout):
+            raise RuntimeError(f"Port {self.port} is still in use after {self.timeout} seconds")
+            
         # Setup FastHTML        
         self._app = FastHTML(exts=self.exts)
         self._server = JupyUvi(self._app)
