@@ -196,6 +196,7 @@ class PageManager:
     """Manages FastHTML pages and websocket connections"""
     exts: str = "ws"
     pages: Dict[str, Page] = field(default_factory=dict)
+    _common_elements: List = field(default_factory=list)
     _context: NotebookContext = field(init=False)
     _app: Any = field(init=False)
     _server: Any = field(init=False)
@@ -213,7 +214,16 @@ class PageManager:
         self._callback_registered = self._context.register_callback(
             self._context.auto_update_cell
         )
-    
+
+    def add_to_all(self, *elements: Any) -> None:
+        """Add elements to all pages (existing and future)"""
+        # Add to existing pages
+        for page in self.pages.values():
+            page.add(*elements)
+        
+        # Store for future pages
+        self._common_elements.extend(elements)
+
     def create_page(self, route: str = "", frame: bool = False) -> Page:
         """Create a new page at the specified route"""
         client = ws_client(self._app, route, frame=frame, link=False)
@@ -268,3 +278,4 @@ class PageManager:
     def get(self, path: str):
         """Decorator for GET routes"""
         return self._app.get(path)
+        
