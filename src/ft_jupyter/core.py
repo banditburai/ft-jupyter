@@ -25,25 +25,37 @@ class NotebookContext:
         from IPython import get_ipython
         self._shell = get_ipython()    
     
-    @contextmanager
+    @contextmanager 
     @requires_shell
     def show_ft(self):
         """Context manager for converting notebook code to FastHTML format."""
-        fasthtml_code = []
-        yield fasthtml_code
+        class CodeCapture:
+            def __init__(self):
+                self.code = None    # For storing the code string
+                self.content = None # For storing the evaluated content
+                
+        result = CodeCapture()
+        yield result
                 
         ip = self._shell
                 
-        cell = ip.history_manager.input_hist_parsed[-1]
+        cell = ip.history_manager.input_hist_parsed[-1]        
         
-        # Remove the context manager lines
-        code_lines = [
-            line for line in cell.splitlines() 
-            if not line.strip().startswith(('with show_ft():', '@contextmanager', 'yield'))
-        ]
+        # First get all lines
+        all_lines = cell.splitlines()
+        
+        # Find the actual content (skip the with show_ft line)
+        content_start = next(i for i, line in enumerate(all_lines) if 'with show_ft()' in line) + 1
+        code_lines = all_lines[content_start:]
+        
+        # Remove leading whitespace
+        if code_lines:
+            base_indent = len(code_lines[0]) - len(code_lines[0].lstrip())
+            code_lines = [line[base_indent:] if line.strip() else line for line in code_lines]    
         
         # Check if this is a route handler
         if any("@manager.post" in line or "@manager.get" in line for line in code_lines):
+            fasthtml_code = []
             for i, line in enumerate(code_lines):
                 if "@manager." in line:
                     method = "get" if "get" in line else "post"
@@ -64,8 +76,11 @@ class NotebookContext:
                         else:
                             fasthtml_code.append(line)
                     break
-        
+            
+            result.code = "\n".join(fasthtml_code)
+            
         elif any("create_page" in line for line in code_lines):
+            fasthtml_code = []
             route = None
             for line in code_lines:
                 if "create_page" in line:
@@ -89,9 +104,17 @@ class NotebookContext:
                 
                 content = "\n        ".join(content_lines)
                 fasthtml_code.append(f"    return Div(\n        {content}\n    )")
-        
-        if fasthtml_code:
-            fasthtml_code[:] = ["\n".join(fasthtml_code)]
+                
+                result.code = "\n".join(fasthtml_code)
+                
+        else:
+            # For UI code, capture both the code string and evaluate the content
+            code_str = "\n".join(code_lines)
+            result.code = code_str
+            try:
+                result.content = eval(code_str, ip.user_ns)            
+            except Exception as e:
+                print(f"\nError evaluating content: {e}")
 
     def register_page(self, page: 'Page') -> None:
         """Register a page for variable tracking"""
