@@ -33,7 +33,7 @@ class NotebookContext:
             def __init__(self):
                 self.code = None    # For storing the code string
                 self.content = None # For storing the evaluated content
-                
+
         result = CodeCapture()
         yield result
                 
@@ -45,8 +45,11 @@ class NotebookContext:
         all_lines = cell.splitlines()
         
         # Find the actual content (skip the with show_ft line)
-        content_start = next(i for i, line in enumerate(all_lines) if 'with show_ft()' in line) + 1
-        code_lines = all_lines[content_start:]
+        try:
+            content_start = next(i for i, line in enumerate(all_lines) if 'show_ft()' in line) + 1
+            code_lines = all_lines[content_start:]
+        except StopIteration:
+            code_lines = all_lines
         
         # Remove leading whitespace
         if code_lines:
